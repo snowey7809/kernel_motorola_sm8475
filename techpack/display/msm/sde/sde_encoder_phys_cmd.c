@@ -231,12 +231,6 @@ static void sde_encoder_phys_cmd_pp_tx_done_irq(void *arg, int irq_idx)
 		scheduler_status = ctl->ops.get_scheduler_status(ctl);
 
 	sde_encoder_helper_get_pp_line_count(phys_enc->parent, info);
-	SDE_EVT32_IRQ(DRMID(phys_enc->parent), ctl->idx - CTL_0,
-		phys_enc->hw_pp->idx - PINGPONG_0, event, scheduler_status,
-		info[0].pp_idx, info[0].intf_idx, info[0].intf_frame_count,
-		info[0].wr_ptr_line_count, info[0].rd_ptr_line_count,
-		info[1].pp_idx, info[1].intf_idx, info[1].intf_frame_count,
-		info[1].wr_ptr_line_count, info[1].rd_ptr_line_count);
 
 	/* Signal any waiting atomic commit thread */
 	wake_up_all(&phys_enc->pending_kickoff_wq);
@@ -299,11 +293,6 @@ static void sde_encoder_phys_cmd_te_rd_ptr_irq(void *arg, int irq_idx)
 	spin_unlock_irqrestore(phys_enc->enc_spinlock, lock_flags);
 
 	sde_encoder_helper_get_pp_line_count(phys_enc->parent, info);
-	SDE_EVT32_IRQ(DRMID(phys_enc->parent), scheduler_status, info[0].pp_idx,
-		info[0].intf_idx, info[0].intf_frame_count,
-		info[0].wr_ptr_line_count, info[0].rd_ptr_line_count,
-		info[1].pp_idx, info[1].intf_idx, info[1].intf_frame_count,
-		info[1].wr_ptr_line_count, info[1].rd_ptr_line_count);
 
 	if (phys_enc->parent_ops.handle_vblank_virt)
 		phys_enc->parent_ops.handle_vblank_virt(phys_enc->parent,
@@ -341,12 +330,6 @@ static void sde_encoder_phys_cmd_wr_ptr_irq(void *arg, int irq_idx)
 	}
 
 	sde_encoder_helper_get_pp_line_count(phys_enc->parent, info);
-	SDE_EVT32_IRQ(DRMID(phys_enc->parent), ctl->idx - CTL_0, event,
-		qsync_mode, info[0].pp_idx, info[0].intf_idx,
-		info[0].intf_frame_count, info[0].wr_ptr_line_count,
-		info[0].rd_ptr_line_count, info[1].pp_idx, info[1].intf_idx,
-		info[1].intf_frame_count, info[1].wr_ptr_line_count,
-		info[1].rd_ptr_line_count);
 
 	if (qsync_mode)
 		sde_encoder_override_tearcheck_rd_ptr(phys_enc);
@@ -687,10 +670,6 @@ static bool _sde_encoder_phys_cmd_is_ongoing_pptx(
 
 		hw_pp->ops.get_vsync_info(hw_pp, &info);
 	}
-
-	SDE_EVT32(DRMID(phys_enc->parent), phys_enc->hw_pp->idx - PINGPONG_0,
-		phys_enc->hw_intf->idx - INTF_0, atomic_read(&phys_enc->pending_kickoff_cnt),
-		info.wr_ptr_line_count, info.intf_frame_count, phys_enc->cached_mode.vdisplay);
 
 	if (info.wr_ptr_line_count > 0 && info.wr_ptr_line_count <
 			phys_enc->cached_mode.vdisplay)
@@ -1938,11 +1917,6 @@ static void sde_encoder_phys_cmd_trigger_start(
 	}
 
 	sde_encoder_helper_get_pp_line_count(phys_enc->parent, info);
-	SDE_EVT32(DRMID(phys_enc->parent), frame_cnt, info[0].pp_idx,
-		info[0].intf_idx, info[0].intf_frame_count,
-		info[0].wr_ptr_line_count, info[0].rd_ptr_line_count,
-		info[1].pp_idx, info[1].intf_idx, info[1].intf_frame_count,
-		info[1].wr_ptr_line_count, info[1].rd_ptr_line_count);
 
 	/* wr_ptr_wait_success is set true when wr_ptr arrives */
 	cmd_enc->wr_ptr_wait_success = false;
