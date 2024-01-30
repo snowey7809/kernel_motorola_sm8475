@@ -496,7 +496,6 @@ struct io_poll_iocb {
 	struct file			*file;
 	struct wait_queue_head		*head;
 	__poll_t			events;
-	int				retries;
 	struct wait_queue_entry		wait;
 };
 
@@ -5006,7 +5005,7 @@ static int io_recvmsg_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 	sr->umsg = u64_to_user_ptr(READ_ONCE(sqe->addr));
 	sr->len = READ_ONCE(sqe->len);
 	sr->bgid = READ_ONCE(sqe->buf_group);
-	sr->msg_flags = READ_ONCE(sqe->msg_flags);
+	sr->msg_flags = READ_ONCE(sqe->msg_flags) | MSG_NOSIGNAL;
 	if (sr->msg_flags & MSG_DONTWAIT)
 		req->flags |= REQ_F_NOWAIT;
 
@@ -5760,14 +5759,6 @@ enum {
 	IO_APOLL_READY
 };
 
-/*
- * We can't reliably detect loops in repeated poll triggers and issue
- * subsequently failing. But rather than fail these immediately, allow a
- * certain amount of retries before we give up. Given that this condition
- * should _rarely_ trigger even once, we should be fine with a larger value.
- */
-#define APOLL_MAX_RETRY		128
-
 static int io_arm_poll_handler(struct io_kiocb *req)
 {
 	const struct io_op_def *def = &io_op_defs[req->opcode];
@@ -5778,6 +5769,8 @@ static int io_arm_poll_handler(struct io_kiocb *req)
 	int ret;
 
 	if (!req->file || !file_can_poll(req->file))
+		return IO_APOLL_ABORTED;
+	if ((req->flags & (REQ_F_POLLED|REQ_F_PARTIAL_IO)) == REQ_F_POLLED)
 		return IO_APOLL_ABORTED;
 	if (!def->pollin && !def->pollout)
 		return IO_APOLL_ABORTED;
@@ -5796,16 +5789,11 @@ static int io_arm_poll_handler(struct io_kiocb *req)
 	if (req->flags & REQ_F_POLLED) {
 		apoll = req->apoll;
 		kfree(apoll->double_poll);
-		if (unlikely(!--apoll->poll.retries)) {
-			apoll->double_poll = NULL;
-			return IO_APOLL_ABORTED;
-		}
 	} else {
 		apoll = kmalloc(sizeof(*apoll), GFP_ATOMIC);
-		if (unlikely(!apoll))
-			return IO_APOLL_ABORTED;
-		apoll->poll.retries = APOLL_MAX_RETRY;
 	}
+	if (unlikely(!apoll))
+		return IO_APOLL_ABORTED;
 	apoll->double_poll = NULL;
 	req->apoll = apoll;
 	req->flags |= REQ_F_POLLED;
@@ -5976,8 +5964,6 @@ static int io_poll_update(struct io_kiocb *req, unsigned int issue_flags)
 	struct io_kiocb *preq;
 	int ret2, ret = 0;
 
-	io_ring_submit_lock(ctx, !(issue_flags & IO_URING_F_NONBLOCK));
-
 	spin_lock(&ctx->completion_lock);
 	preq = io_poll_find(ctx, req->poll_update.old_user_data, true);
 	if (!preq || !io_poll_disarm(preq)) {
@@ -6009,7 +5995,6 @@ out:
 		req_set_fail(req);
 	/* complete update request, we're done with it */
 	io_req_complete(req, ret);
-	io_ring_submit_unlock(ctx, !(issue_flags & IO_URING_F_NONBLOCK));
 	return 0;
 }
 
@@ -9082,17 +9067,14 @@ static int io_sqe_buffer_register(struct io_ring_ctx *ctx, struct iovec *iov,
 	pret = pin_user_pages(ubuf, nr_pages, FOLL_WRITE | FOLL_LONGTERM,
 			      pages, vmas);
 	if (pret == nr_pages) {
-		struct file *file = vmas[0]->vm_file;
-
 		/* don't support file backed memory */
 		for (i = 0; i < nr_pages; i++) {
-			if (vmas[i]->vm_file != file) {
-				ret = -EINVAL;
-				break;
-			}
-			if (!file)
+			struct vm_area_struct *vma = vmas[i];
+
+			if (vma_is_shmem(vma))
 				continue;
-			if (!vma_is_shmem(vmas[i]) && !is_file_hugepages(file)) {
+			if (vma->vm_file &&
+			    !is_file_hugepages(vma->vm_file)) {
 				ret = -EOPNOTSUPP;
 				break;
 			}
