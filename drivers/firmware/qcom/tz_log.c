@@ -31,6 +31,7 @@
 #include <linux/proc_fs.h>
 #if IS_ENABLED(CONFIG_MSM_TMECOM_QMP)
 #include <linux/tmelog.h>
+#endif
 #if IS_ENABLED(CONFIG_QCOM_MINIDUMP)
 #include <soc/qcom/minidump.h>
 #endif
