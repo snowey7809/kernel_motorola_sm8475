@@ -13,7 +13,7 @@
 #include <linux/ion.h>
 #include <linux/msm_ion.h>
 #include <linux/refcount.h>
-#include <media/msm_eva_private.h>
+#include <eva/media/msm_eva_private.h>
 
 #define MAX_FRAME_BUFFER_NUMS 30
 #define MAX_DMABUF_NUMS 64

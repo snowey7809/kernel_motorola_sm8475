@@ -7,7 +7,7 @@
 #define _MSM_CVP_SYNX_H_
 
 #include <linux/types.h>
-#include <media/msm_eva_private.h>
+#include <eva/media/msm_eva_private.h>
 #include "cvp_comm_def.h"
 
 
